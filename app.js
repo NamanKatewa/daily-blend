@@ -1,6 +1,7 @@
 const locationSection = document.getElementById("location-data");
 const weatherSection = document.getElementById("weather-data");
-const newsSection = document.getElementById("news-data");
+const localNewsSection = document.getElementById("local-news-data");
+const nationalNewsSection = document.getElementById("national-news-data");
 
 // Function to change time every second
 function updateTime(timezone) {
@@ -120,15 +121,34 @@ function calculateUVIndex(data) {
 }
 
 // Function to convert into readable time
-function simpleTime(isoString) {
-  const date = new Date(isoString);
-  let hours = date.getHours();
-  const minutes = date.getMinutes();
-  const ampm = hours >= 12 ? "PM" : "AM";
-  hours = hours % 12;
-  hours = hours ? hours : 12;
-  const minutesStr = minutes < 10 ? "0" + minutes : minutes;
-  return `${hours}:${minutesStr} ${ampm}`;
+function simpleTime(gmtString, currentOffset) {
+  const date = new Date(gmtString);
+
+  const utcTimeInMillis = date.getTime();
+
+  const [sign, hours, minutes] = currentOffset
+    .match(/([+-])(\d{1,2}):?(\d{0,2})/)
+    .slice(1);
+
+  const offsetHours = parseInt(hours, 10);
+  const offsetMinutes = parseInt(minutes, 10) || 0;
+
+  const totalOffsetInMillis = (offsetHours * 60 + offsetMinutes) * 60 * 1000;
+  const adjustedOffsetInMillis =
+    sign === "+" ? totalOffsetInMillis : -totalOffsetInMillis;
+
+  const localTimeInMillis = utcTimeInMillis + adjustedOffsetInMillis;
+
+  const localDate = new Date(localTimeInMillis);
+
+  let hoursLocal = localDate.getHours();
+  const minutesLocal = localDate.getMinutes();
+  const ampm = hoursLocal >= 12 ? "PM" : "AM";
+  hoursLocal = hoursLocal % 12;
+  hoursLocal = hoursLocal ? hoursLocal : 12;
+  const minutesStr = minutesLocal < 10 ? "0" + minutesLocal : minutesLocal;
+
+  return `${hoursLocal}:${minutesStr} ${ampm}`;
 }
 
 // Wait for the DOM content to load before doing anything
@@ -172,10 +192,15 @@ document.addEventListener("DOMContentLoaded", function () {
         .then((weather) => {
           sunrise = document.getElementById("sunrise");
           sunset = document.getElementById("sunset");
+          console.log();
           sunrise.innerHTML += `Sunrise: ${simpleTime(
-            weather.daily.sunrise[0]
+            weather.daily.sunrise[0],
+            locationData.utc_offset
           )}`;
-          sunset.innerHTML += `Sunset: ${simpleTime(weather.daily.sunset[0])}`;
+          sunset.innerHTML += `Sunset: ${simpleTime(
+            weather.daily.sunset[0],
+            locationData.utc_offset
+          )}`;
           weatherSection.innerHTML = `${getWeatherIcon(
             mapWeatherCodeToDescription(weather.current_weather.weathercode)
           )}
@@ -228,6 +253,74 @@ document.addEventListener("DOMContentLoaded", function () {
         // Handling errors when fetching Weather
         .catch((err) => {
           console.error("Error fetching weather", err);
+        });
+
+      // Fetch Local News
+      fetch(
+        `http://localhost:8000?string=${locationData.city} ${locationData.country_name}`
+      )
+        .then((res) => res.text())
+        .then((news) => {
+          const parser = new DOMParser();
+          const newsXML = parser.parseFromString(news, "application/xml");
+          const items = newsXML.getElementsByTagName("item");
+          Array.from(items).forEach((item) => {
+            const title = item.getElementsByTagName("title")[0].textContent;
+            const description =
+              item.getElementsByTagName("description")[0].textContent;
+            const descriptionParser = new DOMParser();
+            const descriptionDoc = descriptionParser.parseFromString(
+              description,
+              "text/html"
+            );
+            const descriptionLink = descriptionDoc.querySelector("a")?.href;
+            const source = item.getElementsByTagName("source")[0].textContent;
+
+            localNewsSection.innerHTML += `
+            <a href="${descriptionLink}">
+                    <li>
+                    <h3>${title}</h3>
+                    <p class="news-source">Source: ${source}</p>
+                </li>
+                </a>
+          `;
+          });
+        })
+        .catch((err) => {
+          console.error("Error fetching local news", err);
+        });
+
+      // Fetch National News
+      fetch(`http://localhost:8000?string=${locationData.country_name}`)
+        .then((res) => res.text())
+        .then((news) => {
+          const parser = new DOMParser();
+          const newsXML = parser.parseFromString(news, "application/xml");
+          const items = newsXML.getElementsByTagName("item");
+          Array.from(items).forEach((item) => {
+            const title = item.getElementsByTagName("title")[0].textContent;
+            const description =
+              item.getElementsByTagName("description")[0].textContent;
+            const descriptionParser = new DOMParser();
+            const descriptionDoc = descriptionParser.parseFromString(
+              description,
+              "text/html"
+            );
+            const descriptionLink = descriptionDoc.querySelector("a")?.href;
+            const source = item.getElementsByTagName("source")[0].textContent;
+
+            nationalNewsSection.innerHTML += `
+            <a href="${descriptionLink}">
+                    <li>
+                    <h3>${title}</h3>
+                    <p class="news-source">Source: ${source}</p>
+                </li>
+                </a>
+          `;
+          });
+        })
+        .catch((err) => {
+          console.error("Error fetching national news", err);
         });
     })
     // Handling errors when fetching Location
