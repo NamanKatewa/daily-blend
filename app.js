@@ -112,9 +112,9 @@ function getWindDirection(degrees) {
 
 // Function to calculate UV Index from Solar Radiation
 function calculateUVIndex(data) {
-  const ghi = data[4];
-  const dni = data[5];
-  const dhi = data[6];
+  const ghi = data[5];
+  const dni = data[6];
+  const dhi = data[7];
   const tsi = ghi + dni + dhi;
   const uvIndex = tsi * 0.005;
   return uvIndex.toFixed(2);
